@@ -1,0 +1,525 @@
+---
+title: "Analiza danych dotyczących rynku gier wideo "
+author: "Oleksandr Radionenko 274003"
+date: "05.06.2023"
+output:
+    html_document: 
+      number_sections: yes
+      theme: united
+      toc: yes
+      toc_float: yes
+      dev: svg
+      highlight: haddock
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, 
+               cache = FALSE,
+               prompt = FALSE,
+               tidy = TRUE,
+               comment = NA,
+               message = FALSE,
+               warning = FALSE,
+               fig.width = 7.4,
+               fig.height = 4.7,
+               fig.align = "center")
+opts_knit$set(width = 75)
+```
+
+<style> 
+
+tr {font-family: 'Fira Mono'; font-size:90%}
+code, kbd,pre,samp {font-family: 'Fira Mono';
+                    background-color: rgba(237, 125, 49, 0.04)}
+body, h1, h2, h3, h4, h5 {font-family: 'Fira Sans'}
+
+</style>
+
+
+
+Witamy serdecznie! Przygotowałem mały projekt co dotyczy analizy rynku gier 
+
+wideo i konkretnie jednej firmy (Electonic Arts), zrobiłem badania całego 
+
+rynku z różnymi wykresami i obliczeniami. Występowałem niby "menedżerem" EA który zbierał potrzebną informację.
+
+
+
+# Rozdział 1. Wczytywanie danych
+
+
+## Wczytawanie potrzebnych pakietów.  
+
+```{r}
+# Wczytywanie pakietów
+
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(RColorBrewer)
+library(scales)
+library(reshape2)
+library(tidyverse)
+library(ggcorrplot)
+```
+
+## Wczytywanie danych (tabeli)
+```{r}
+# Wczytywanie pliku .xlsx z potrzebną informacją
+
+videogames <- read_excel("C:/Users/Victus/Desktop/Statystyka/Project_Statystyka/vgsales.xlsx")
+
+# Usuwanie wartości N/A aby ułatwić wizualizację
+
+videogames <- mutate(videogames, Year = as.integer(Year))
+videogames <- na.omit(videogames)
+
+str(videogames)
+```
+
+__Pola obejmują:__
+
+- Rank - ranking ogólnej sprzedaży
+
+- Name - nazwa gry
+
+- Platform - platforma wydania gry (np. PC, PS4 itp.)
+
+- Year - rok wydania gry
+
+- Genre - gatunek gry
+
+- Publisher - Wydawca gry
+
+- NA_Sales - Sprzedaż w Ameryce Północnej (w milionach)
+
+- EU_Sales - Sprzedaż w Europie (w milionach)
+
+- JP_Sales - Sprzedaż w Japonii (w milionach)
+
+- Other_Sales - sprzedaż w pozostałych częściach świata (w mln)
+
+- Global_Sales - łączna sprzedaż na całym świecie.
+
+
+
+
+# Rozdział 2. Globalna analiza całego rynku.
+
+## Wykres 1. Ilość gier wydanych każdego roku
+```{r}
+# Ilość gier rocznie
+
+videogames %>%
+  group_by(Year) %>%
+  summarise(Total_Games = n()) %>%
+  ggplot(aes(x = Year, y = Total_Games)) +
+  geom_col(color = "#3399FF", fill = "#6633FF") +
+  theme_minimal() +
+  labs(x = "Rok", y = "Ilość gier") +
+  ggtitle("Ilość gier Wydanych każdego Roku") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+## Wykres 2. Gry według gatunku na rok
+```{r}
+# Gry według gatunku na rok
+
+videogames %>%
+  na.omit() %>%
+  group_by(Year, Genre) %>%
+  summarise(Number = n()) %>%
+  ggplot(aes(x = Year, y = Number, color = Genre)) +
+  geom_point(size = 2) +
+  geom_line(size = 1) +
+  scale_color_brewer(palette = "Set3") +
+  xlim(1980, 2016) +
+  theme_minimal() +
+  labs(x = "Rok", y = "Ilość gier", color = "Gatunek") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+
+```
+
+## Wykres 3. Top 5 gatunków na rynku
+```{r}
+# Top
+
+top_genres <- videogames %>%
+  group_by(Genre) %>%
+  summarise(Total = n()) %>%
+  arrange(desc(Total)) %>%
+  head(5)
+
+ggplot(top_genres, aes(x = reorder(Genre, -Total), y = Total, fill = Genre)) +
+  geom_col() +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  labs(x = "", y = "Ilośc gier") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+## Wykres 4. Globalne wahania sprzedaży każdego roku
+```{r}
+# Global sales variation per year
+
+videogames %>%
+  filter(!(Year %in% c("2020", "2017"))) %>%
+  ggplot() +
+  aes(x = as.factor(Year), y = Global_Sales) +
+  geom_boxplot(fill = "#99CC66") +
+  scale_y_continuous(trans = "log10") +
+  theme_minimal() +
+  labs(x = "Rok", y = "Sprzedazy globalne (log scale)") +
+  theme(plot.title = element_text(face = "bold", size = 16)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+## Wykres 5. Najbardziej aktywna platforma 
+```{r}
+# Najbardziej aktywna platforma na przestrzeni lat
+
+videogames %>%
+  group_by(Year, Platform) %>%
+  summarise(Total_Games = n()) %>%
+  arrange(Year) %>%
+  ggplot(aes(x = Year, y = Platform, fill = Total_Games)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "#0099FF", mid = "white", high = "#FF3366", midpoint = 300) +
+  theme_minimal() +
+  labs(x = "Rok", y = "Platforma", fill = "Ilosc gier") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+
+```
+
+## Wykres 6. Najbardziej dochodowe gry wszech czasów
+```{r}
+# Najbardziej dochodowe gry wszech czasów
+
+videogames %>% 
+  head(20) %>% 
+  ggplot(aes(x=reorder(Name,-Global_Sales), y= Global_Sales, fill=Genre)) +
+  labs(x = "Gra", y = "Sprzedazy", fill = "Gatunek" )+
+  geom_col() +
+  scale_fill_manual(
+    values = c(
+      Action = "#1B9E77",
+      Adventure = "#93752C",
+      Fighting = "#BD6332",
+      Misc = "#7E6EA2",
+      Platform = "#B3499C",
+      Puzzle = "#CF3F76",
+      Racing = "#7D8F31",
+      `Role-Playing` = "#A0A811",
+      Shooter = "#E0A604",
+      Simulation = "#B78415",
+      Sports = "#8E7037",
+      Strategy = "#666666"
+    )
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+## Wykres 7. Najbardziej aktywni wydawcy (według liczby gier)
+```{r}
+# Najbardziej aktywni wydawcy (według liczby gier)
+top_publishers <- videogames %>%
+  group_by(Publisher) %>%
+  summarise(Total_Games = n()) %>%
+  arrange(desc(Total_Games)) %>%
+  head(10)
+
+ggplot(top_publishers, aes(x = reorder(Publisher, Total_Games), fill = Publisher, y = Total_Games)) +
+  geom_col() +
+  scale_fill_brewer(palette = "Set3") +  
+  labs(y = "Ilosc gier", x = "Wydawca", fill = "") +
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Wydawca", y = "Ilosc gier") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+
+```
+
+## Wykres 8. Najlepiej sprzedające się gry w każdym roku
+```{r}
+# Najlepiej sprzedające się gry w każdym roku
+library(ggplot2)
+
+videogames %>%
+  group_by(Year) %>% 
+  arrange(desc(Global_Sales)) %>% 
+  slice(1) %>% 
+  ggplot(aes(y = reorder(Year, -Year), x = Global_Sales, fill = Genre)) +
+  labs(y = "Rok", x = "Sprzedaże globalne", fill = "Gatunek") +
+  geom_text(aes(label = Name), position = position_dodge(width = 0.8), hjust = -0.05, size = 3) +
+  geom_col() +
+  scale_fill_manual(
+    values = c(
+      Action = "#1B9E77",
+      Adventure = "#93752C",
+      Fighting = "#BD6332",
+      Misc = "#7E6EA2",
+      Platform = "#B3499C",
+      Puzzle = "#CF3F76",
+      Racing = "#7D8F31",
+      `Role-Playing` = "#A0A811",
+      Shooter = "#E0A604",
+      Simulation = "#B78415",
+      Sports = "#8E7037",
+      Strategy = "#666666"
+    )
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 8),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 1, angle = 90, hjust = 0.1))
+
+  
+```
+__2006 - Wii Sports__
+
+
+## Wykres 9 . Korelacja między sprzedażą globalną i pozostałymi
+
+```{r}
+# Korelacja między sprzedażą globalną i pozostałymi
+
+num_Sales=videogames[,c("NA_Sales","EU_Sales","JP_Sales","Other_Sales","Global_Sales")]
+
+correlation <- cor(num_Sales)
+
+ggcorrplot::ggcorrplot(correlation, hc.order = TRUE, outline.col = "purple",
+                       type = "lower",
+                       colors = c("blue", "gray", "red"),
+                       lab = TRUE,
+                       ggtheme = theme_minimal())
+```
+
+## Wykres 10.  Ewolucja gier na PC
+```{r}
+# Ewolucja gier na PC
+
+videogames %>%
+  filter(Platform %in% "PC") %>%
+  ggplot() +
+  aes(x = Year, y = Global_Sales, colour = Genre, group = Global_Sales) +
+  geom_jitter(size = 2.5) +
+  scale_color_brewer(palette = "Set3") +
+  labs(y = "Sprzedazy globalne", x = "Rok", colour = "Gatunek") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+## Wykres 11. Top 20 gier wszech czasów
+```{r}
+# Top 20 gier wszech czasów
+top_games <- videogames %>%
+  arrange(desc(Global_Sales)) %>%
+  head(20)
+
+ggplot(top_games, aes(x = reorder(Name, -Global_Sales), y = Global_Sales)) +
+  geom_bar(stat = "identity", fill = "#009E73", width = 0.7) +
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Gra", y = "Sprzedaży", title = "Top 20 gier wszech czasow") +
+  theme(axis.text.y = element_text(size = 8))
+```
+
+## Wykres 12. Najlepsza gra dla każdego regionu 
+```{r}
+# Najlepsza gra dla każdego regionu 
+region_sales <- videogames %>%
+  filter(!is.na(JP_Sales) & !is.na(NA_Sales) & !is.na(EU_Sales) & !is.na(Other_Sales))
+
+best_games <- region_sales %>%
+  gather(key = "Region", value = "Sales", -Name) %>%
+  filter(Region %in% c("EU_Sales", "JP_Sales", "NA_Sales", "Other_Sales")) %>%
+  group_by(Region) %>%
+  slice(which.max(Sales)) %>%
+  ungroup()
+
+unique_games <- unique(best_games$Name)
+num_games <- length(unique_games)
+
+colors <- brewer.pal(num_games, "Set1")
+
+best_games_plot <- ggplot(best_games, aes(x = Region, y = Sales, fill = Name)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.5) +
+  geom_text(aes(label = paste(Name)), vjust = -0.5, position = position_dodge(width = 0.5)) +
+  theme_minimal() +
+  labs(x = "Region", y = "Sprzedazy", title = "Najlepsza gra dla kazdego regionu ") +
+  scale_fill_manual(values = colors) +
+  theme(legend.position = "top") +
+  guides(fill = guide_legend(title = "Gra")) +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+best_games_plot
+
+```
+
+# Rozdział 3. Analiza Electronic Arts
+
+
+## Liczenie 1. Grupowanie danych
+```{r}
+#EA
+ ## Tworzenie zmiennych, grupowanie danych w bardziej szczegolny sposob i liczenie 
+
+ea_games <- videogames %>% filter(Publisher == "Electronic Arts")
+ea_sales <- sum(ea_games$Global_Sales)
+total_sales <- sum(videogames$Global_Sales)
+ea_market_share <- ea_sales / total_sales * 100
+ea_market_share
+```
+
+## Liczenie 2. Shapiro-Wilk test
+```{r}
+# Shapiro-Wilk test for normality
+
+shapiro_test <- shapiro.test(ea_games$Global_Sales)
+shapiro_test
+```
+
+## Wykres 1. Udział Electronic Arts (EA) w rynku
+
+```{r}
+# Udział Electronic Arts (EA) w rynku
+
+## Tworzenie zmiennej i grupowanie 
+market_share_data <- data.frame(Category = c("EA", "Inne"), Market_Share
+ = c(ea_market_share, 100 - ea_market_share))
+
+#Wykres
+
+ggplot(market_share_data, aes(x = "", y = Market_Share, fill = Category)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = c("EA" = "#5D6795", "Inne" = "lightblue")) +
+  labs(x = "", y = "", title = "Udział Electronic Arts (EA) w rynku", fill = "Kategoria") +
+  geom_text(
+    aes(label = sprintf("%.2f%%", Market_Share)),
+    position = position_stack(vjust = 0.5),
+    size = 4
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  ) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+```
+
+## Wykres 2. Wykres Quantile-Quantile sprzedazy gier 
+```{r}
+# Quantile-Quantile (Q-Q) plot dla EA 
+ggplot(ea_games, aes(sample = Global_Sales)) +
+  stat_qq() +
+  stat_qq_line() +
+  theme_minimal() 
+```
+
+## Wykres 3. Top 20 popularnych gier od EA
+```{r}
+# Tworzenie zmiennej i grupowanie 
+popular_ea_games <- ea_games %>%
+  group_by(Name) %>%
+  summarise(Total_Sales = sum(Global_Sales)) %>%
+  arrange(desc(Total_Sales)) %>%
+  top_n(20, Total_Sales)
+
+#Wykres
+ggplot(popular_ea_games, aes(x = reorder(Name, -Total_Sales), y = Total_Sales)) +
+  geom_bar(stat = "identity", fill = "#009E73", width = 0.7) +
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Gra", y = "Sprzedaży", title = "Top 20 popularnych gier od EA") +
+  theme(axis.text.y = element_text(size = 8))
+```
+
+
+## Wykres 4. Top 5 gatunków EA
+```{r}
+
+# Grupowanie danych konkretnie dla Electronic Arts
+top_genres_ea <- ea_games %>%
+  group_by(Genre) %>%
+  summarise(Total_Sales = sum(Global_Sales)) %>%
+  arrange(desc(Total_Sales)) %>%
+  top_n(5, Total_Sales)
+
+# Wykres
+ggplot(top_genres_ea, aes(x = reorder(Genre, -Total_Sales), y = Total_Sales)) +
+  geom_bar(stat = "identity", fill = "#FF9933", width = 0.7) +
+  theme_minimal() +
+  labs(x = "Gatunek", y = "Sprzedaży", title = "Top 5 Gatunkow dla EA") +
+  theme(plot.title = element_text(face = "bold", size = 16)) +
+  coord_flip()
+```
+
+## Wykres 5. Udział EA w rynku gier sportowych
+```{r}
+
+# Udział EA w rynku gier sportowych
+
+##Grupowanie i zmienne 
+sports_games <- videogames %>% filter(Genre == "Sports")
+ea_sports_sales <- sum(sports_games$Global_Sales[sports_games$Publisher == "Electronic Arts"])
+total_sports_sales <- sum(sports_games$Global_Sales)
+ea_market_share_sports <- ea_sports_sales / total_sports_sales * 100
+
+market_share_data_sports <- data.frame(Category = c("EA", "Inne"), Market_Share = c(ea_market_share_sports, 100 - ea_market_share_sports))
+
+## Wykres
+ggplot(market_share_data_sports, aes(x = "", y = Market_Share, fill = Category)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = c("EA" = "#5D6795", "Inne" = "lightblue")) +
+  labs(x = "", y = "", title = "Udział EA w rynku gier sportowych", fill = "Kategoria") +
+  geom_text(aes(label = sprintf("%.2f%%", Market_Share)), position = position_stack(vjust = 0.5), size = 4) +
+  theme_void() +
+  theme(plot.title = element_text(face = "bold", size = 16), legend.position = "bottom") +
+  guides(fill = guide_legend(reverse = TRUE))
+
+```
+
+## Wykres 6. Najlepsza platforma dla Electronic Arts  
+```{r}
+
+# Bajlepsza platforma dla Electronic Arts (all time)
+
+## Grupowanie 
+ea_platform_sales <- ea_games %>%
+  group_by(Platform) %>%
+  summarise(Total_Sales = sum(Global_Sales)) %>%
+  arrange(desc(Total_Sales)) %>%
+  head(5)
+
+## Tworzenie wykresu
+ggplot(ea_platform_sales, aes(x = reorder(Platform, -Total_Sales), y = Total_Sales)) +
+  geom_bar(stat = "identity", fill = "#009E73", width = 0.7) +
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Platforma", y = "Sprzedaży", title = "Najlepsza platforma dla Electronic Arts") +
+  theme(axis.text.y = element_text(size = 8))
+
+```
+
+
+## Wykres 7. Obliczenie średniej sprzedaży gier od Electronic Arts (EA) dla każdego roku:
+```{r}
+
+#Obliczenia
+mean_sales_per_year <- ea_games %>%
+  group_by(Year) %>%
+  summarise(Average_Sales = mean(Global_Sales))
+
+#Wykres
+ggplot(mean_sales_per_year, aes(x = Year, y = Average_Sales)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Rok", y = "Średnia sprzedaż", title = "Średnia roczna sprzedaż gier EA")
+```
